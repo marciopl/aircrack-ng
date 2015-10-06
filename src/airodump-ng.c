@@ -653,8 +653,9 @@ char usage[] =
 "      -h                    : Hides known stations for --showack\n"
 "      -f            <msecs> : Time in ms between hopping channels\n"
 "      --berlin       <secs> : Time before removing the AP/client\n"
-"                              from the screen when no more packets\n"
-"                              are received (Default: 120 seconds)\n"
+"                              from the screen (or json file) when\n"
+"                              no more packets are received\n"
+"                              (Default: 120 seconds)\n"
 "      -r             <file> : Read packets from that file\n"
 "      -x            <msecs> : Active Scanning Simulation\n"
 "      --manufacturer        : Display manufacturer from IEEE OUI list\n"
@@ -662,7 +663,7 @@ char usage[] =
 "      --wps                 : Display WPS information (if any)\n"
 "      --output-format\n"
 "                  <formats> : Output format. Possible values:\n"
-"                              pcap, ivs, csv, gps, kismet, netxml\n"
+"                              pcap, ivs, csv, json, gps, kismet, netxml\n"
 "      --ignore-negative-one : Removes the message that says\n"
 "                              fixed channel <interface>: -1\n"
 "      --write-interval\n"
@@ -867,6 +868,22 @@ int dump_initialize( char *prefix, int ivs_only )
 		memset(ofn, 0, ofn_len);
 		snprintf( ofn,  ofn_len, "%s-%02d.%s",
 				  prefix, G.f_index, AIRODUMP_NG_CSV_EXT );
+
+		if( ( G.f_txt = fopen( ofn, "wb+" ) ) == NULL )
+		{
+			perror( "fopen failed" );
+			fprintf( stderr, "Could not create \"%s\".\n", ofn );
+			free( ofn );
+			return( 1 );
+		}
+	}
+
+	/* create the output JSON file */
+
+	if (G.output_format_json) {
+		memset(ofn, 0, ofn_len);
+		snprintf( ofn,  ofn_len, "%s-%02d.%s",
+				  prefix, G.f_index, AIRODUMP_NG_JSON_EXT );
 
 		if( ( G.f_txt = fopen( ofn, "wb+" ) ) == NULL )
 		{
@@ -3935,6 +3952,102 @@ int dump_write_csv( void )
     return 0;
 }
 
+int dump_write_json() {
+	int i, probes_written, htz, mtz;
+	struct tm *ltime;
+	struct AP_info *ap_cur;
+	struct ST_info *st_cur;
+	char * temp;
+	extern long timezone;
+	char stz[7];
+	tzset();
+
+	if (! G.record_data || !G.output_format_json)
+		return 0;
+
+	fseek(G.f_txt, 0, SEEK_SET);
+	fprintf(G.f_txt, "[\r\n");
+	st_cur = G.st_1st;
+
+	mtz = timezone % 60;
+	htz = -timezone / 3600;
+	if (htz > 0)
+		sprintf(stz, "+%02d:%02d", htz, mtz);
+	else 
+		sprintf(stz, "%03d:%02d", htz, mtz);
+
+	while(st_cur != NULL) {
+		ap_cur = st_cur->base;
+
+		if (ap_cur->nb_pkt < 2) {
+			st_cur = st_cur->next;
+			continue;
+		}
+
+		ltime = localtime(&st_cur->tlast);
+
+		time_t now;
+		time(&now);
+		if(difftime(now, st_cur->tlast) > G.berlin) {
+			st_cur = st_cur->next;
+			continue;
+		}
+
+		fprintf(G.f_txt, "{");
+
+		fprintf(G.f_txt, "\"station_mac\":\"""%02X:%02X:%02X:%02X:%02X:%02X\",",
+				st_cur->stmac[0], st_cur->stmac[1],
+				st_cur->stmac[2], st_cur->stmac[3],
+				st_cur->stmac[4], st_cur->stmac[5]);
+
+		ltime = localtime( &st_cur->tinit );
+		fprintf(G.f_txt, "\"first_seen\":\"%04d-%02d-%02dT%02d:%02d:%02d%s,\"",
+				1900 + ltime->tm_year, 1 + ltime->tm_mon,
+				ltime->tm_mday, ltime->tm_hour,
+				ltime->tm_min,  ltime->tm_sec, stz );
+		
+
+		fprintf(G.f_txt, "\"last_seen\":\"%04d-%02d-%02dT%02d:%02d:%02d%s\",",
+				1900 + ltime->tm_year, 1 + ltime->tm_mon,
+				ltime->tm_mday, ltime->tm_hour,
+				ltime->tm_min,  ltime->tm_sec, stz );
+
+		fprintf(G.f_txt, "\"power\":%02d", st_cur->power);
+		probes_written = 0;
+		for (i = 0; i < NB_PRB; i++) {
+			if (st_cur->ssid_length[i] == 0)
+				continue;
+
+			temp = format_text_for_csv(st_cur->probes[i], st_cur->ssid_length[i]);
+
+			if (probes_written == 0) {
+				fprintf(G.f_txt, ",\"probed_essid\":\"%s", temp);
+				probes_written = 1;
+			} else {
+				fprintf(G.f_txt, ",%s", temp);
+			}
+			free(temp);
+		}
+		if (probes_written != 0)
+			fprintf(G.f_txt, "\"");
+
+		temp = get_manufacturer(st_cur->stmac[0], st_cur->stmac[1], st_cur->stmac[2]);
+		if (temp != NULL) {
+			fprintf(G.f_txt, ",\"manufacturer\":\"%s\"", temp);
+			free(temp);
+		}
+
+		
+		if (st_cur->next != NULL) {
+			fprintf(G.f_txt, "},\r\n");
+		} else {
+			fprintf(G.f_txt, "}");
+		}
+		st_cur = st_cur->next;
+	}
+	return 0;
+}
+
 char * sanitize_xml(unsigned char * text, int length)
 {
 	int i;
@@ -6221,6 +6334,7 @@ int main( int argc, char *argv[] )
 
 	G.output_format_pcap = 1;
     G.output_format_csv = 1;
+    G.output_format_json = 1;
     G.output_format_kismet_csv = 1;
     G.output_format_kismet_netxml = 1;
     G.file_write_interval = 5; // Write file every 5 seconds by default
@@ -6471,6 +6585,7 @@ int main( int argc, char *argv[] )
 
 					G.output_format_pcap = 0;
 					G.output_format_csv = 0;
+					G.output_format_json = 0;
 					G.output_format_kismet_csv = 0;
     				G.output_format_kismet_netxml = 0;
 				}
@@ -6633,6 +6748,7 @@ int main( int argc, char *argv[] )
 
 					G.output_format_pcap = 0;
 					G.output_format_csv = 0;
+					G.output_format_json = 0;
 					G.output_format_kismet_csv = 0;
     				G.output_format_kismet_netxml = 0;
 				}
@@ -6644,6 +6760,8 @@ int main( int argc, char *argv[] )
 						if (strncasecmp(output_format_string, "csv", 3) == 0
 							|| strncasecmp(output_format_string, "txt", 3) == 0) {
 							G.output_format_csv = 1;
+						} else if (strncasecmp(output_format_string, "json", 4) == 0) {
+							G.output_format_json = 1;
 						} else if (strncasecmp(output_format_string, "pcap", 4) == 0
 							|| strncasecmp(output_format_string, "cap", 3) == 0) {
                             if (ivs_only) {
@@ -6673,11 +6791,13 @@ int main( int argc, char *argv[] )
 						} else if (strncasecmp(output_format_string, "default", 6) == 0) {
 							G.output_format_pcap = 1;
 							G.output_format_csv = 1;
+							G.output_format_json = 1;
 							G.output_format_kismet_csv = 1;
 							G.output_format_kismet_netxml = 1;
 						} else if (strncasecmp(output_format_string, "none", 6) == 0) {
 							G.output_format_pcap = 0;
 							G.output_format_csv = 0;
+							G.output_format_json = 0;
 							G.output_format_kismet_csv = 0;
     						G.output_format_kismet_netxml = 0;
 
@@ -6999,6 +7119,7 @@ usage:
 
             tt1 = time( NULL );
             if (G. output_format_csv)  dump_write_csv();
+            if (G.output_format_json) dump_write_json();
             if (G.output_format_kismet_csv) dump_write_kismet_csv();
             if (G.output_format_kismet_netxml) dump_write_kismet_netxml();
         }
@@ -7320,10 +7441,11 @@ usage:
 
     if (G.record_data) {
         if ( G. output_format_csv)  dump_write_csv();
+        if ( G.output_format_json) dump_write_json();
         if ( G.output_format_kismet_csv) dump_write_kismet_csv();
         if ( G.output_format_kismet_netxml) dump_write_kismet_netxml();
 
-        if ( G. output_format_csv || G.f_txt != NULL ) fclose( G.f_txt );
+        if ( G.output_format_json || G. output_format_csv || G.f_txt != NULL ) fclose( G.f_txt );
         if ( G.output_format_kismet_csv || G.f_kis != NULL ) fclose( G.f_kis );
         if ( G.output_format_kismet_netxml || G.f_kis_xml != NULL )
         {

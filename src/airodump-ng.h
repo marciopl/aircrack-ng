@@ -1,4 +1,4 @@
-/* 
+/*
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -122,6 +122,7 @@ extern unsigned char * getmac(char * macAddress, int strict, unsigned char * mac
 extern int get_ram_size(void);
 char *get_manufacturer(unsigned char mac0, unsigned char mac1, unsigned char mac2);
 
+#define AIRODUMP_NG_JSON_EXT "json"
 #define AIRODUMP_NG_CSV_EXT "csv"
 #define KISMET_CSV_EXT "kismet.csv"
 #define KISMET_NETXML_EXT "kismet.netxml"
@@ -274,7 +275,7 @@ struct AP_info
     						  /* detecting WEP cloak	  */
     						  /* + one byte to indicate   */
     						  /* (in)existence of the IV  */
-					  
+
     int marked;
     int marked_color;
     struct WPS_info wps;
@@ -449,6 +450,7 @@ struct globals
     int output_format_csv;
     int output_format_kismet_csv;
     int output_format_kismet_netxml;
+    int output_format_json;
     pthread_t input_tid;
     int sort_by;
     int sort_inv;
@@ -463,10 +465,10 @@ struct globals
     int skip_columns;
     int do_pause;
     int do_sort_always;
-    
+
     pthread_mutex_t mx_print;			 /* lock write access to ap LL   */
     pthread_mutex_t mx_sort;			 /* lock write access to ap LL   */
-    
+
     unsigned char selected_bssid[6];	/* bssid that is selected */
 
     int ignore_negative_one;
