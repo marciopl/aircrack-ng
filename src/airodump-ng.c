@@ -4001,7 +4001,7 @@ int dump_write_json() {
 				st_cur->stmac[4], st_cur->stmac[5]);
 
 		ltime = localtime( &st_cur->tinit );
-		fprintf(G.f_txt, "\"first_seen\":\"%04d-%02d-%02dT%02d:%02d:%02d%s,\"",
+		fprintf(G.f_txt, "\"first_seen\":\"%04d-%02d-%02dT%02d:%02d:%02d%s\",",
 				1900 + ltime->tm_year, 1 + ltime->tm_mon,
 				ltime->tm_mday, ltime->tm_hour,
 				ltime->tm_min,  ltime->tm_sec, stz );
