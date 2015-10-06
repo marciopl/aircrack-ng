@@ -3966,7 +3966,7 @@ int dump_write_json() {
 		return 0;
 
 	fseek(G.f_txt, 0, SEEK_SET);
-	fprintf(G.f_txt, "[\r\n");
+	fprintf(G.f_txt, "[");
 	st_cur = G.st_1st;
 
 	mtz = timezone % 60;
@@ -4045,6 +4045,7 @@ int dump_write_json() {
 		}
 		st_cur = st_cur->next;
 	}
+	fprintf(G.f_txt, "]");
 	return 0;
 }
 
