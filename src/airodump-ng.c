@@ -4000,6 +4000,15 @@ int dump_write_json() {
 				st_cur->stmac[2], st_cur->stmac[3],
 				st_cur->stmac[4], st_cur->stmac[5]);
 
+		if(memcmp(ap_cur->bssid, BROADCAST, 6)) {
+			fprintf(G.f_txt, "\"current_ap_bssid\":\"""%02X:%02X:%02X:%02X:%02X:%02X\",",
+			    ap_cur->bssid[0], ap_cur->bssid[1],
+			    ap_cur->bssid[2], ap_cur->bssid[3],
+			    ap_cur->bssid[4], ap_cur->bssid[5] );
+			temp = format_text_for_csv(ap_cur->essid, ap_cur->ssid_length);
+        	fprintf(G.f_txt, "\"current_ap_essid\":\"%s\",", temp);
+		}
+					
 		ltime = localtime( &st_cur->tinit );
 		fprintf(G.f_txt, "\"first_seen\":\"%04d-%02d-%02dT%02d:%02d:%02d%s\",",
 				1900 + ltime->tm_year, 1 + ltime->tm_mon,
@@ -4046,6 +4055,7 @@ int dump_write_json() {
 		st_cur = st_cur->next;
 	}
 	fprintf(G.f_txt, "]");
+	fflush(G.f_txt);
 	return 0;
 }
 
