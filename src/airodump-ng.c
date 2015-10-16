@@ -72,6 +72,7 @@
 #include "airodump-ng.h"
 #include "osdep/common.h"
 #include "common.h"
+#include <json-c/json.h>
 
 // libgcrypt thread callback definition for libgcrypt < 1.6.0
 #ifdef USE_GCRYPT
@@ -3976,6 +3977,15 @@ char *replace_str(char *str, const char *orig, const char *rep) {
 	return buffer;
 }
 
+char* strconcat(char *s1, char *s2) {
+    size_t len1 = strlen(s1);
+    size_t len2 = strlen(s2);
+    char *result = malloc(len1+len2+1);//+1 for the zero-terminator
+    memcpy(result, s1, len1);
+    memcpy(result+len1, s2, len2+1);//+1 to copy the null-terminator
+    return result;
+}
+
 int dump_write_json() {
 	int i, probes_written, htz, mtz;
 	struct tm *ltime;
@@ -3990,8 +4000,8 @@ int dump_write_json() {
 		return 0;
 
 	fseek(G.f_txt, 0, SEEK_SET);
-	fprintf(G.f_txt, "[");
 	st_cur = G.st_1st;
+	json_object *station_array = json_object_new_array();
 
 	mtz = timezone % 60;
 	htz = -timezone / 3600;
@@ -4017,67 +4027,82 @@ int dump_write_json() {
 			continue;
 		}
 
-		fprintf(G.f_txt, "{");
+		json_object *st_obj = json_object_new_object();
+		char tmp[1024];
 
-		fprintf(G.f_txt, "\"station_mac\":\"""%02X:%02X:%02X:%02X:%02X:%02X\",",
+		sprintf(tmp, "%02X:%02X:%02X:%02X:%02X:%02X",
 				st_cur->stmac[0], st_cur->stmac[1],
 				st_cur->stmac[2], st_cur->stmac[3],
 				st_cur->stmac[4], st_cur->stmac[5]);
 
+		json_object *st_string = json_object_new_string(tmp);
+		json_object_object_add(st_obj, "station_mac", st_string);
+
 		if(memcmp(ap_cur->bssid, BROADCAST, 6)) {
-			fprintf(G.f_txt, "\"current_ap_bssid\":\"""%02X:%02X:%02X:%02X:%02X:%02X\",",
+			sprintf(tmp, "%02X:%02X:%02X:%02X:%02X:%02X",
 			    ap_cur->bssid[0], ap_cur->bssid[1],
 			    ap_cur->bssid[2], ap_cur->bssid[3],
 			    ap_cur->bssid[4], ap_cur->bssid[5] );
 			temp = format_text_for_csv(ap_cur->essid, ap_cur->ssid_length);
-        	fprintf(G.f_txt, "\"current_ap_essid\":\"%s\",", temp);
+		  	json_object *ap_bssid_string = json_object_new_string(tmp);
+		  	json_object *ap_essid_string = json_object_new_string(temp);
+		    json_object_object_add(st_obj, "current_ap_bssid", ap_bssid_string);
+		  	json_object_object_add(st_obj, "current_ap_essid", ap_essid_string);
 		}
-					
+
 		ltime = localtime( &st_cur->tinit );
-		fprintf(G.f_txt, "\"first_seen\":\"%04d-%02d-%02dT%02d:%02d:%02d%s\",",
+
+		sprintf(tmp, "%04d-%02d-%02dT%02d:%02d:%02d%s",
 				1900 + ltime->tm_year, 1 + ltime->tm_mon,
 				ltime->tm_mday, ltime->tm_hour,
 				ltime->tm_min,  ltime->tm_sec, stz );
-		
+		json_object *first_seen_object = json_object_new_string(tmp);
+		json_object_object_add(st_obj, "first_seen", first_seen_object);
 
-		fprintf(G.f_txt, "\"last_seen\":\"%04d-%02d-%02dT%02d:%02d:%02d%s\",",
+		sprintf(tmp, "%04d-%02d-%02dT%02d:%02d:%02d%s",
 				1900 + ltime->tm_year, 1 + ltime->tm_mon,
 				ltime->tm_mday, ltime->tm_hour,
 				ltime->tm_min,  ltime->tm_sec, stz );
+		json_object *last_seen_object = json_object_new_string(tmp);
+		json_object_object_add(st_obj, "last_seen", last_seen_object);
 
-		fprintf(G.f_txt, "\"power\":%02d", st_cur->power);
+		json_object *power_object = json_object_new_int(st_cur->power);
+		json_object_object_add(st_obj, "power", power_object);
+
 		probes_written = 0;
+		char *tmp1;
 		for (i = 0; i < NB_PRB; i++) {
 			if (st_cur->ssid_length[i] == 0)
 				continue;
 
-			temp = replace_str(format_text_for_csv(st_cur->probes[i], st_cur->ssid_length[i]), "\"", " ");
+			temp = format_text_for_csv(st_cur->probes[i], st_cur->ssid_length[i]);
 			if (probes_written == 0) {
-				fprintf(G.f_txt, ",\"probed_essid\":\"%s", temp);
+				tmp1 = malloc(strlen(temp)+1);
+				strcpy(tmp1, temp);
 				probes_written = 1;
 			} else {
-				fprintf(G.f_txt, ",%s", temp);
+				tmp1 = strconcat(tmp1, strconcat(",", temp));
 			}
 			free(temp);
 		}
-		if (probes_written != 0)
-			fprintf(G.f_txt, "\"");
+
+		if (probes_written != 0) {
+			json_object *probed_ssid_object = json_object_new_string(tmp1);
+			json_object_object_add(st_obj, "probed_ssid", probed_ssid_object);
+		}
 
 		temp = get_manufacturer(st_cur->stmac[0], st_cur->stmac[1], st_cur->stmac[2]);
 		if (temp != NULL) {
-			fprintf(G.f_txt, ",\"manufacturer\":\"%s\"", temp);
+			json_object *manufacturer = json_object_new_string(temp);
+			json_object_object_add(st_obj, "manufacturer", manufacturer);
 			free(temp);
 		}
 
-		
-		if (st_cur->next != NULL) {
-			fprintf(G.f_txt, "},\r\n");
-		} else {
-			fprintf(G.f_txt, "}");
-		}
+		json_object_array_add(station_array, st_obj);
 		st_cur = st_cur->next;
 	}
-	fprintf(G.f_txt, "]");
+	fprintf(G.f_txt, "%s", json_object_to_json_string(station_array));
+	//fprintf(G.f_txt, "]");
 	fflush(G.f_txt);
 	return 0;
 }
