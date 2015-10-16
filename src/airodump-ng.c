@@ -3952,6 +3952,30 @@ int dump_write_csv( void )
     return 0;
 }
 
+char *replace_str(char *str, const char *orig, const char *rep) {
+	size_t buf_index = 0;
+	static char buffer[10000];
+
+	if (!strstr(str, orig)) {
+		return str;
+	}
+
+	buffer[0] = 0;
+	for(;;) { 
+		char *p;
+
+		if (!(p = strstr(str, orig))) {
+			strcpy(buffer + buf_index, str);
+			return buffer;
+		}
+		strncpy(buffer + buf_index, str, p - str);
+		strcpy(buffer + buf_index + (p - str), rep);
+		buf_index += (p-str) + strlen(rep);
+		str = p + strlen(orig);
+	}
+	return buffer;
+}
+
 int dump_write_json() {
 	int i, probes_written, htz, mtz;
 	struct tm *ltime;
@@ -4027,8 +4051,7 @@ int dump_write_json() {
 			if (st_cur->ssid_length[i] == 0)
 				continue;
 
-			temp = format_text_for_csv(st_cur->probes[i], st_cur->ssid_length[i]);
-
+			temp = replace_str(format_text_for_csv(st_cur->probes[i], st_cur->ssid_length[i]), "\"", " ");
 			if (probes_written == 0) {
 				fprintf(G.f_txt, ",\"probed_essid\":\"%s", temp);
 				probes_written = 1;
