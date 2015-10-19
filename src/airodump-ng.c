@@ -4028,7 +4028,7 @@ int dump_write_json() {
 		}
 
 		json_object *st_obj = json_object_new_object();
-		char tmp[1024];
+		char tmp[2048];
 
 		sprintf(tmp, "%02X:%02X:%02X:%02X:%02X:%02X",
 				st_cur->stmac[0], st_cur->stmac[1],
@@ -4048,6 +4048,7 @@ int dump_write_json() {
 		  	json_object *ap_essid_string = json_object_new_string(temp);
 		    json_object_object_add(st_obj, "current_ap_bssid", ap_bssid_string);
 		  	json_object_object_add(st_obj, "current_ap_essid", ap_essid_string);
+			free(temp);
 		}
 
 		ltime = localtime( &st_cur->tinit );
@@ -4101,9 +4102,7 @@ int dump_write_json() {
 		json_object_array_add(station_array, st_obj);
 		st_cur = st_cur->next;
 	}
-	fprintf(G.f_txt, "%s", json_object_to_json_string(station_array));
-	//fprintf(G.f_txt, "]");
-	fflush(G.f_txt);
+	json_object_to_file("file-01.json", station_array);
 	return 0;
 }
 
