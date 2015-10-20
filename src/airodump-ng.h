@@ -350,6 +350,7 @@ struct globals
     char *f_cap_name;
 
     int f_index;            /* outfiles index       */
+    char *f_filename;	    /* json output filename */
     FILE *f_txt;            /* output csv file      */
     FILE *f_kis;            /* output kismet csv file      */
     FILE *f_kis_xml;        /* output kismet netxml file */

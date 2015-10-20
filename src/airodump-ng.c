@@ -885,7 +885,8 @@ int dump_initialize( char *prefix, int ivs_only )
 		memset(ofn, 0, ofn_len);
 		snprintf( ofn,  ofn_len, "%s-%02d.%s",
 				  prefix, G.f_index, AIRODUMP_NG_JSON_EXT );
-
+		G.f_filename = (char *)calloc(1, sizeof(ofn)+1);
+		sprintf(G.f_filename, "%s", ofn);
 		if( ( G.f_txt = fopen( ofn, "wb+" ) ) == NULL )
 		{
 			perror( "fopen failed" );
@@ -3999,7 +4000,7 @@ int dump_write_json() {
 	if (! G.record_data || !G.output_format_json)
 		return 0;
 
-	fseek(G.f_txt, 0, SEEK_SET);
+	//fseek(G.f_txt, 0, SEEK_SET);
 	st_cur = G.st_1st;
 	json_object *station_array = json_object_new_array();
 
@@ -4060,6 +4061,7 @@ int dump_write_json() {
 		json_object *first_seen_object = json_object_new_string(tmp);
 		json_object_object_add(st_obj, "first_seen", first_seen_object);
 
+		ltime = localtime( &st_cur->tlast );
 		sprintf(tmp, "%04d-%02d-%02dT%02d:%02d:%02d%s",
 				1900 + ltime->tm_year, 1 + ltime->tm_mon,
 				ltime->tm_mday, ltime->tm_hour,
@@ -4102,7 +4104,7 @@ int dump_write_json() {
 		json_object_array_add(station_array, st_obj);
 		st_cur = st_cur->next;
 	}
-	json_object_to_file("file-01.json", station_array);
+	json_object_to_file(G.f_filename, station_array);
 	return 0;
 }
 
